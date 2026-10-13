@@ -1,12 +1,12 @@
 # Laya 2048 Lab
 
-A web 2048 game with a human mode, an autonomous move button, and autoplay. The backend owns the game rules and asks Laya to choose among legal moves. A safe fallback keeps the game moving if the model is unavailable or returns an invalid answer.
+A web 2048 game with a human mode, an autonomous move button, and autoplay. The backend owns the game rules and uses an expectimax strategy, optionally consulting Laya. A safe fallback keeps the game moving if the model is unavailable or returns an invalid answer.
 
 ## What this project demonstrates
 
 - React + TypeScript game UI with keyboard controls and autoplay.
 - FastAPI endpoints for game creation, moves, and AI decisions.
-- A replaceable decision-engine interface: a no-download demo advisor or Laya's upstream PyTorch runtime.
+- A replaceable decision-engine interface: a no-download expectimax advisor or Laya's upstream PyTorch runtime.
 - Basic measurements in the UI: score, moves, largest tile, chosen move, and whether fallback was used.
 
 ## Repository layout
@@ -24,7 +24,7 @@ web/
 
 The browser owns presentation and input. The backend owns the authoritative board, score, legal-move checks, and AI provider. `advisor.py` is isolated so a later heuristic or benchmark agent can be added without changing the API or UI.
 
-Laya is not trained specifically for 2048. This project is an experiment in structured decision making, not a claim that the model is a strong 2048 player. Game rules reject illegal moves; they do not prove that a legal move is strategically good.
+Laya is not trained specifically for 2048. The app uses a CPU-only expectimax search for the demo and as a strategic guard around Laya's choice. It looks ahead across random tile spawns and scores open cells, tile ordering, merge opportunities, smoothness, and keeping the largest tile in a corner. This is a stronger baseline than choosing the first legal direction, but it remains a heuristic and cannot guarantee a 2048 tile every game.
 
 ## Requirements
 
@@ -71,12 +71,12 @@ The first real prediction downloads the selected checkpoint from Hugging Face. E
 ## Game loop
 
 1. The browser sends the current board and score to `POST /api/games/{id}/ai-move`.
-2. FastAPI calculates legal directions and formats a compact state for Laya.
-3. Laya returns one typed `choice` from the legal directions.
-4. The game engine applies the move, merges tiles once per turn, adds a new tile, and returns the updated state.
-5. If inference fails or produces an unusable direction, the backend picks the first legal direction and marks the turn as a fallback.
+2. FastAPI evaluates legal moves with expectimax, including possible random 2 and 4 spawns.
+3. With `AI_PROVIDER=laya`, Laya also returns a typed choice; expectimax guards against a clearly weaker model choice.
+4. The game engine applies the selected move, merges tiles once per turn, adds a new tile, and returns the updated state.
+5. If inference fails, the backend applies a legal fallback and marks the turn as a fallback.
 
-The fallback is deliberately visible. It is not presented as a Laya decision.
+The fallback is deliberately visible. It is not presented as a Laya decision. The default `demo` provider runs expectimax directly, without downloading model weights.
 
 The starter keeps sessions in memory; restarting FastAPI clears them. That is intentional for a local demo. SQLite, authentication, deployment, and long-running background autoplay are follow-up work rather than hidden promises of this starter.
 
