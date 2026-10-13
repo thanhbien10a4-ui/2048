@@ -1,3 +1,4 @@
+from app.advisor import DemoAdvisor
 from app.game import Game, legal_moves, move_board
 
 
@@ -33,3 +34,15 @@ def test_game_rejects_no_op_without_mutating_counters():
     assert game.apply("left", "test") is False
     assert game.moves == 0
     assert game.score == 0
+
+
+def test_demo_advisor_uses_search_to_choose_a_merge():
+    board = [
+        [2, 2, 0, 0],
+        [0, 0, 0, 0],
+        [0, 0, 0, 0],
+        [0, 0, 0, 0],
+    ]
+    suggestion = DemoAdvisor(depth=2).suggest(board, score=0)
+    assert suggestion.direction == "left"
+    assert suggestion.direction in legal_moves(board)
