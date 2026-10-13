@@ -7,7 +7,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-from .advisor import get_advisor
+from .advisor import ExpectimaxAdvisor, get_advisor
 from .game import Direction, Game, legal_moves
 
 app = FastAPI(title="Laya 2048 Lab API", version="0.1.0")
@@ -64,6 +64,7 @@ def ai_move(game_id: str) -> dict:
     game = _get_game(game_id)
     if game.over:
         raise HTTPException(status_code=409, detail="Game is over")
+    fallback_used = False
     try:
         suggestion = get_advisor().suggest(game.board, game.score)
         source = suggestion.provider
@@ -71,19 +72,23 @@ def ai_move(game_id: str) -> dict:
         if not game.apply(direction, source=source):
             raise ValueError("Advisor suggested an illegal move")
     except Exception:
+        fallback_used = True
         logger.exception("AI move failed; applying a visible safe fallback")
         options = legal_moves(game.board)
         if not options:
             game.over = True
             return game.as_dict()
-        direction = options[0]
-        game.apply(direction, source="fallback")
+        try:
+            direction = ExpectimaxAdvisor().suggest(game.board, game.score).direction
+        except Exception:
+            direction = options[0]
+        game.apply(direction, source="expectimax fallback")
         game.fallback_count += 1
     response = game.as_dict()
     response["decision"] = {
         "direction": game.last_move,
         "provider": game.last_source,
-        "fallback": game.last_source == "fallback",
+        "fallback": fallback_used,
         "confidence": getattr(locals().get("suggestion"), "confidence", None),
     }
     return response
